@@ -69,4 +69,46 @@ export const OrderRepository = {
     );
     return result.rows[0] ?? null;
   },
+
+  async findByTenant(tenantId: string, filters: { status?: string; limit: number; offset: number }) {
+    if (filters.status) {
+      const result = await query(
+        `SELECT * FROM orders
+          WHERE tenant_id = $1 AND status = $2
+          ORDER BY created_at DESC
+          LIMIT $3 OFFSET $4`,
+        [tenantId, filters.status, filters.limit, filters.offset],
+      );
+      return result.rows;
+    }
+
+    const result = await query(
+      `SELECT * FROM orders
+        WHERE tenant_id = $1
+        ORDER BY created_at DESC
+        LIMIT $2 OFFSET $3`,
+      [tenantId, filters.limit, filters.offset],
+    );
+    return result.rows;
+  },
+
+  async findByIdWithItems(orderId: string, tenantId: string) {
+    const orderResult = await query(
+      `SELECT * FROM orders WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+      [orderId, tenantId],
+    );
+    const order = orderResult.rows[0];
+    if (!order) return null;
+
+    const itemsResult = await query(
+      `SELECT oi.id, oi.product_id, oi.quantity, oi.unit_price, p.name AS product_name
+         FROM order_items oi
+         JOIN products p ON p.id = oi.product_id
+        WHERE oi.order_id = $1
+        ORDER BY oi.created_at ASC`,
+      [orderId],
+    );
+
+    return { ...order, items: itemsResult.rows };
+  },
 };
