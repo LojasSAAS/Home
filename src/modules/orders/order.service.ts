@@ -4,6 +4,7 @@ import { ProductRepository } from '@/modules/products/product.repository';
 import { CreateOrderInput } from './order.schema';
 import { OrderRepository } from './order.repository';
 import { Store } from '@/types';
+import { emitOrderStatusUpdate } from '@/modules/chat/chat.gateway';
 
 /**
  * Cria um pedido de forma orquestrada.
@@ -89,4 +90,83 @@ function tenantSupportsFulfillment(tenant: Store, type: CreateOrderInput['fulfil
   if (type === 'DELIVERY') return tenant.accepts_delivery;
   if (type === 'PICKUP') return tenant.accepts_pickup;
   return tenant.accepts_in_store;
+}
+
+/**
+ * Transições de status permitidas. Qualquer mudança fora deste mapa é rejeitada,
+ * evitando pulos inconsistentes (ex: PENDING -> COMPLETED direto).
+ * CANCELLED é alcançável a partir de qualquer estado não-terminal.
+ */
+const ALLOWED_TRANSITIONS: Record<string, string[]> = {
+  PENDING: ['ACCEPTED', 'CANCELLED'],
+  ACCEPTED: ['PREPARING', 'CANCELLED'],
+  PREPARING: ['OUT_FOR_DELIVERY', 'READY_FOR_PICKUP', 'COMPLETED', 'CANCELLED'],
+  OUT_FOR_DELIVERY: ['COMPLETED', 'CANCELLED'],
+  READY_FOR_PICKUP: ['COMPLETED', 'CANCELLED'],
+  COMPLETED: [], // estado terminal
+  CANCELLED: [], // estado terminal
+};
+
+/**
+ * Atualiza o status de um pedido, validando a transição e — se for cancelamento —
+ * devolvendo o estoque reservado. Notifica cliente/loja em tempo real via socket.
+ */
+export async function updateOrderStatus(
+  tenantId: string,
+  orderId: string,
+  newStatus: string,
+  reason: string | undefined,
+) {
+  return withTransaction(async (client) => {
+    const currentResult = await client.query(
+      `SELECT id, status FROM orders WHERE id = $1 AND tenant_id = $2 FOR UPDATE`,
+      [orderId, tenantId],
+    );
+
+    const current = currentResult.rows[0];
+    if (!current) {
+      throw new AppError('Pedido não encontrado nesta loja', 404);
+    }
+
+    const allowed = ALLOWED_TRANSITIONS[current.status] ?? [];
+    if (!allowed.includes(newStatus)) {
+      throw new AppError(
+        `Não é possível mudar de '${current.status}' para '${newStatus}'`,
+        422,
+      );
+    }
+
+    // Cancelamento devolve o estoque reservado no momento da criação do pedido.
+    if (newStatus === 'CANCELLED') {
+      const itemsResult = await client.query(
+        `SELECT product_id, quantity FROM order_items WHERE order_id = $1`,
+        [orderId],
+      );
+      for (const item of itemsResult.rows) {
+        await client.query(
+          `UPDATE products SET current_stock = current_stock + $1 WHERE id = $2`,
+          [item.quantity, item.product_id],
+        );
+      }
+    }
+
+    const updateResult = await client.query(
+      `UPDATE orders
+          SET status = $1, cancellation_reason = CASE WHEN $1 = 'CANCELLED' THEN $2 ELSE cancellation_reason END
+        WHERE id = $3 AND tenant_id = $4
+        RETURNING *`,
+      [newStatus, reason ?? null, orderId, tenantId],
+    );
+
+    const updatedOrder = updateResult.rows[0];
+
+    emitOrderStatusUpdate(orderId, {
+      order_id: orderId,
+      status: newStatus,
+      reason: newStatus === 'CANCELLED' ? reason ?? null : undefined,
+      updated_at: updatedOrder.updated_at,
+    });
+
+    return updatedOrder;
+  });
 }
