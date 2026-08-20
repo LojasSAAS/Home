@@ -6,6 +6,7 @@ import productRoutes from '@/modules/products/product.routes';
 import orderRoutes from '@/modules/orders/order.routes';
 import lgpdRoutes from '@/modules/lgpd/lgpd.routes';
 import authRoutes from '@/modules/auth/auth.routes';
+import onboardingRoutes from '@/modules/onboarding/onboarding.routes';
 import { errorHandler } from '@/middlewares/error.middleware';
 
 export function createApp() {
@@ -18,6 +19,7 @@ export function createApp() {
   app.get('/health', (_req, res) => res.status(200).json({ status: 'ok' }));
 
   app.use(authRoutes);
+  app.use(onboardingRoutes);
   app.use(productRoutes);
   app.use(orderRoutes);
   app.use(lgpdRoutes);
