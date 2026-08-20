@@ -6,11 +6,6 @@ import { OnboardingInput } from './onboarding.schema';
 
 const SALT_ROUNDS = 12;
 
-/**
- * Cria a loja (tenant) e seu primeiro funcionário com papel OWNER numa única
- * transação — se qualquer etapa falhar (ex: slug duplicado), nada é persistido.
- * Já devolve um token STORE_STAFF válido, pronto pra logar no painel.
- */
 export async function onboardStore(input: OnboardingInput) {
   return withTransaction(async (client) => {
     const existingSlug = await client.query(`SELECT id FROM stores WHERE slug = $1 LIMIT 1`, [
