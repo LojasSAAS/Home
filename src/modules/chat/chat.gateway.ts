@@ -10,6 +10,8 @@ interface SendMessagePayload {
   message_body: string;
 }
 
+let ioInstance: Server | null = null;
+
 /**
  * Cada pedido vira uma "sala" (room) isolada: order:<order_id>.
  * Cliente e loja entram na mesma sala; ninguém fora do pedido recebe as mensagens.
@@ -20,6 +22,8 @@ export function initChatGateway(httpServer: HttpServer) {
       origin: process.env.CORS_ORIGIN ?? '*',
     },
   });
+
+  ioInstance = io;
 
   io.on('connection', (socket: Socket) => {
     socket.on('join_order', async ({ order_id }: { order_id: string }) => {
@@ -68,4 +72,13 @@ export function initChatGateway(httpServer: HttpServer) {
 
 function roomName(orderId: string) {
   return `order:${orderId}`;
+}
+
+/**
+ * Notifica cliente e loja (mesma sala do pedido) sobre mudança de status.
+ * Usado pelo order.service ao aceitar/preparar/cancelar/etc um pedido.
+ * Se o socket ainda não foi inicializado (ex: script isolado), é um no-op seguro.
+ */
+export function emitOrderStatusUpdate(orderId: string, payload: Record<string, unknown>) {
+  ioInstance?.to(roomName(orderId)).emit('order_status_updated', payload);
 }
