@@ -33,3 +33,23 @@ export const createOrderSchema = z
   );
 
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
+
+export const updateOrderStatusSchema = z.object({
+  status: z.enum([
+    'ACCEPTED',
+    'PREPARING',
+    'OUT_FOR_DELIVERY',
+    'READY_FOR_PICKUP',
+    'COMPLETED',
+    'CANCELLED',
+  ]),
+  reason: z.string().max(500).optional(), // usado sobretudo em CANCELLED
+});
+
+export const listOrdersQuerySchema = z.object({
+  status: z
+    .enum(['PENDING', 'ACCEPTED', 'PREPARING', 'OUT_FOR_DELIVERY', 'READY_FOR_PICKUP', 'COMPLETED', 'CANCELLED'])
+    .optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  offset: z.coerce.number().int().min(0).default(0),
+});
