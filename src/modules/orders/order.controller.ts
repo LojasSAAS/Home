@@ -1,7 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { query } from '@/config/database';
-import { createOrderSchema } from './order.schema';
-import { createOrder } from './order.service';
+import { createOrderSchema, updateOrderStatusSchema, listOrdersQuerySchema } from './order.schema';
+import { createOrder, updateOrderStatus } from './order.service';
+import { OrderRepository } from './order.repository';
 import { AppError } from '@/middlewares/error.middleware';
 import { Store } from '@/types';
 
@@ -37,6 +38,67 @@ export async function postOrder(req: Request, res: Response, next: NextFunction)
     const order = await createOrder(input, tenantResult.rows[0], req.userId!);
 
     return res.status(201).json({ order });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * GET /stores/:slug/orders?status=PENDING&limit=20&offset=0
+ * Painel do lojista: lista pedidos da loja, com filtro opcional por status.
+ */
+export async function getOrders(req: Request, res: Response, next: NextFunction) {
+  try {
+    const tenant = req.tenant!;
+    const parsed = listOrdersQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Query inválida', details: parsed.error.flatten() });
+    }
+
+    const orders = await OrderRepository.findByTenant(tenant.id, parsed.data);
+    return res.status(200).json({ orders });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * GET /stores/:slug/orders/:id
+ * Detalhe do pedido com itens (nome do produto incluso, útil pro painel).
+ */
+export async function getOrderById(req: Request, res: Response, next: NextFunction) {
+  try {
+    const tenant = req.tenant!;
+    const { id } = req.params;
+
+    const order = await OrderRepository.findByIdWithItems(id, tenant.id);
+    if (!order) {
+      return res.status(404).json({ error: 'Pedido não encontrado nesta loja' });
+    }
+
+    return res.status(200).json(order);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * PATCH /stores/:slug/orders/:id/status
+ * Ação central do painel do lojista: aceitar, preparar, marcar como saiu
+ * para entrega/pronto para retirada, concluir ou cancelar.
+ */
+export async function patchOrderStatus(req: Request, res: Response, next: NextFunction) {
+  try {
+    const tenant = req.tenant!;
+    const { id } = req.params;
+
+    const parsed = updateOrderStatusSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Payload inválido', details: parsed.error.flatten() });
+    }
+
+    const order = await updateOrderStatus(tenant.id, id, parsed.data.status, parsed.data.reason);
+    return res.status(200).json({ order });
   } catch (err) {
     next(err);
   }
