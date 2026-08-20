@@ -13,7 +13,7 @@ export const pool = new Pool({
   connectionTimeoutMillis: 5_000,
 });
 
-pool.on('error', (err) => {
+pool.on('error', (err: Error) => {
   // Erros em clientes ociosos no pool não devem derrubar o processo
   console.error('[db] erro inesperado no pool de conexões', err);
 });
