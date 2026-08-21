@@ -111,4 +111,57 @@ export const OrderRepository = {
 
     return { ...order, items: itemsResult.rows };
   },
+
+  /**
+   * Lista os pedidos do PRÓPRIO cliente (todas as lojas), mais recentes primeiro.
+   * Inclui nome/slug da loja pra a tela "Meus Pedidos" não precisar de outra chamada.
+   */
+  async findByCustomer(customerId: string, filters: { status?: string; limit: number; offset: number }) {
+    const statusClause = filters.status ? `AND o.status = $2` : '';
+    const params: unknown[] = filters.status
+      ? [customerId, filters.status, filters.limit, filters.offset]
+      : [customerId, filters.limit, filters.offset];
+
+    const limitIdx = filters.status ? 3 : 2;
+    const offsetIdx = filters.status ? 4 : 3;
+
+    const result = await query(
+      `SELECT o.*, s.name AS store_name, s.slug AS store_slug
+         FROM orders o
+         JOIN stores s ON s.id = o.tenant_id
+        WHERE o.customer_id = $1 ${statusClause}
+        ORDER BY o.created_at DESC
+        LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+      params,
+    );
+    return result.rows;
+  },
+
+  /**
+   * Detalhe de UM pedido do cliente, com itens — escopado por customer_id,
+   * então mesmo sabendo o UUID de outro pedido, o cliente não acessa.
+   */
+  async findByIdForCustomer(orderId: string, customerId: string) {
+    const orderResult = await query(
+      `SELECT o.*, s.name AS store_name, s.slug AS store_slug
+         FROM orders o
+         JOIN stores s ON s.id = o.tenant_id
+        WHERE o.id = $1 AND o.customer_id = $2
+        LIMIT 1`,
+      [orderId, customerId],
+    );
+    const order = orderResult.rows[0];
+    if (!order) return null;
+
+    const itemsResult = await query(
+      `SELECT oi.id, oi.product_id, oi.quantity, oi.unit_price, p.name AS product_name
+         FROM order_items oi
+         JOIN products p ON p.id = oi.product_id
+        WHERE oi.order_id = $1
+        ORDER BY oi.created_at ASC`,
+      [orderId],
+    );
+
+    return { ...order, items: itemsResult.rows };
+  },
 };
