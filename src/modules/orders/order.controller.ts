@@ -103,3 +103,43 @@ export async function patchOrderStatus(req: Request, res: Response, next: NextFu
     next(err);
   }
 }
+
+/**
+ * GET /orders?status=PENDING&limit=20&offset=0
+ * "Meus Pedidos": lista os pedidos do cliente autenticado, em qualquer loja,
+ * mais recentes primeiro. Escopado por req.userId — nunca pelo body/query.
+ */
+export async function getMyOrders(req: Request, res: Response, next: NextFunction) {
+  try {
+    const parsed = listOrdersQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Query inválida', details: parsed.error.flatten() });
+    }
+
+    const orders = await OrderRepository.findByCustomer(req.userId!, parsed.data);
+    return res.status(200).json({ orders });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * GET /orders/:id
+ * Detalhe de UM pedido do cliente autenticado (com itens e dados da loja).
+ * Escopado por customer_id — tentar o ID de um pedido de outra pessoa dá 404,
+ * não 403, pra não revelar que o pedido existe.
+ */
+export async function getMyOrderById(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { id } = req.params;
+
+    const order = await OrderRepository.findByIdForCustomer(id, req.userId!);
+    if (!order) {
+      return res.status(404).json({ error: 'Pedido não encontrado' });
+    }
+
+    return res.status(200).json(order);
+  } catch (err) {
+    next(err);
+  }
+}
