@@ -150,9 +150,10 @@ export async function updateOrderStatus(
       }
     }
 
-    const updateResult = await client.query(
+        const updateResult = await client.query(
       `UPDATE orders
-          SET status = $1, cancellation_reason = CASE WHEN $1 = 'CANCELLED' THEN $2 ELSE cancellation_reason END
+          SET status = $1::order_status,
+              cancellation_reason = CASE WHEN $1::text = 'CANCELLED' THEN $2 ELSE cancellation_reason END
         WHERE id = $3 AND tenant_id = $4
         RETURNING *`,
       [newStatus, reason ?? null, orderId, tenantId],
