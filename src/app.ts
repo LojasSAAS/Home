@@ -7,6 +7,7 @@ import orderRoutes from '@/modules/orders/order.routes';
 import lgpdRoutes from '@/modules/lgpd/lgpd.routes';
 import authRoutes from '@/modules/auth/auth.routes';
 import onboardingRoutes from '@/modules/onboarding/onboarding.routes';
+import staffRoutes from '@/modules/staff/staff.routes';
 import { errorHandler } from '@/middlewares/error.middleware';
 
 export function createApp() {
@@ -20,6 +21,7 @@ export function createApp() {
 
   app.use(authRoutes);
   app.use(onboardingRoutes);
+  app.use(staffRoutes);
   app.use(productRoutes);
   app.use(orderRoutes);
   app.use(lgpdRoutes);
