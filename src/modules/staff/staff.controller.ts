@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { AppError } from '@/middlewares/error.middleware';
 import { inviteStaffSchema } from './staff.schema';
 import { StaffRepository } from './staff.repository';
+import { RefreshTokenRepository } from '@/modules/auth/refreshToken.repository';
 
 const SALT_ROUNDS = 12;
 
@@ -81,6 +82,11 @@ export async function patchStaffActive(req: Request, res: Response, next: NextFu
     const staff = await StaffRepository.setActive(tenant.id, id, is_active);
     if (!staff) {
       return res.status(404).json({ error: 'Funcionário não encontrado nesta loja' });
+    }
+
+    // Desativar mata as sessões já abertas na hora — não só bloqueia login novo.
+    if (!is_active) {
+      await RefreshTokenRepository.revokeAllForSubject(staff.id, 'STORE_STAFF');
     }
 
     return res.status(200).json({ staff });
