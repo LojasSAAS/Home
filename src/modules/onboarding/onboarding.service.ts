@@ -2,12 +2,18 @@ import bcrypt from 'bcryptjs';
 import { withTransaction } from '@/config/database';
 import { AppError } from '@/middlewares/error.middleware';
 import { signToken } from '@/utils/jwt';
+import { RefreshTokenRepository } from '@/modules/auth/refreshToken.repository';
 import { OnboardingInput } from './onboarding.schema';
 
 const SALT_ROUNDS = 12;
 
+/**
+ * Cria a loja (tenant) e seu primeiro funcionário com papel OWNER numa única
+ * transação — se qualquer etapa falhar (ex: slug duplicado), nada é persistido.
+ * Já devolve um par access/refresh token, pronto pra logar no painel.
+ */
 export async function onboardStore(input: OnboardingInput) {
-  return withTransaction(async (client) => {
+  const { store, owner } = await withTransaction(async (client) => {
     const existingSlug = await client.query(`SELECT id FROM stores WHERE slug = $1 LIMIT 1`, [
       input.store.slug,
     ]);
@@ -44,8 +50,17 @@ export async function onboardStore(input: OnboardingInput) {
     );
     const owner = staffResult.rows[0];
 
-    const token = signToken({ sub: owner.id, type: 'STORE_STAFF', tenant_id: store.id, role: 'OWNER' });
-
-    return { store, owner, token };
+    return { store, owner };
   });
+
+  // Emitido DEPOIS do commit — evita gravar um refresh token válido para
+  // uma loja/funcionário cuja transação ainda pode dar rollback.
+  const token = signToken({ sub: owner.id, type: 'STORE_STAFF', tenant_id: store.id, role: 'OWNER' });
+  const refreshToken = await RefreshTokenRepository.issue({
+    subjectId: owner.id,
+    subjectType: 'STORE_STAFF',
+    tenantId: store.id,
+  });
+
+  return { store, owner, token, refreshToken };
 }
