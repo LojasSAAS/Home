@@ -14,7 +14,7 @@ export interface TokenPayload {
   role?: string;
 }
 
-export function signToken(payload: TokenPayload, expiresIn: jwt.SignOptions['expiresIn'] = '7d'): string {
+export function signToken(payload: TokenPayload, expiresIn: jwt.SignOptions['expiresIn'] = '15m'): string {
   const options: jwt.SignOptions = { expiresIn };
   return jwt.sign(payload, JWT_SECRET, options);
 }
