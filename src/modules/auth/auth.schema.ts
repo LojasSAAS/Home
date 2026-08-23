@@ -26,3 +26,7 @@ export const loginStoreStaffSchema = z.object({
 });
 
 export type RegisterCustomerInput = z.infer<typeof registerCustomerSchema>;
+
+export const refreshTokenSchema = z.object({
+  refreshToken: z.string().min(1),
+});
